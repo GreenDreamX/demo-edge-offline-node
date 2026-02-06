@@ -1,11 +1,10 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  // Abaikan error ESLint saat build (biar gak gagal cuma karena variabel gak kepake)
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Matikan pengecekan Eslint saat build
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Abaikan error TypeScript saat build (biar jalan dulu)
+  // Matikan pengecekan TypeScript saat build
   typescript: {
     ignoreBuildErrors: true,
   },
