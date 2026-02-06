@@ -1,17 +1,17 @@
 // app/api/records/route.ts
 import { NextResponse } from 'next/server';
-import { saveRecord, getRecords, getStatus, toggleOfflineMode, trySync } from '@/lib/storage';
+import { saveMedicalRecord, getRecords, getStatus, toggleOfflineMode, trySync } from '@/lib/storage';
 
 export async function GET() {
-  return NextResponse.json({ 
-    records: getRecords(), 
-    status: getStatus() 
+  return NextResponse.json({
+    records: getRecords(),
+    status: getStatus()
   });
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
-  
+
   if (body.action === 'toggle-offline') {
     const status = toggleOfflineMode();
     return NextResponse.json({ offline: status });
@@ -22,8 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   }
 
-  if (body.name) {
-    const newRecord = await saveRecord(body);
+  if (body.nik && body.name) {
+    const newRecord = await saveMedicalRecord(body);
     return NextResponse.json(newRecord);
   }
 
