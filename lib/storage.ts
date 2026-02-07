@@ -1,7 +1,7 @@
 // lib/storage.ts
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
-import PouchDB from 'pouchdb';
+// import PouchDB from 'pouchdb'; // Lazy loaded
 
 export interface PatientRecord {
   id: string;
@@ -444,6 +444,7 @@ export const resetDatabase = async () => {
 
   // 2. Clear Persistence (if active)
   try {
+    const PouchDB = (await import('pouchdb')).default;
     await new PouchDB('simrs_main').destroy();
     await new PouchDB('simrs-offline').destroy();
     console.log('🔥 PouchDB Destroyed');
