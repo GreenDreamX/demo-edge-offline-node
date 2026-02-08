@@ -1,13 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Matikan pengecekan Eslint saat build
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // Matikan pengecekan TypeScript saat build
   typescript: {
     ignoreBuildErrors: true,
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  output: 'standalone',
 };
 
 export default nextConfig;
