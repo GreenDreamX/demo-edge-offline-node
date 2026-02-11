@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RS Sehat Sejahtera",
-  description: "RS Sehat Sejahtera",
+  title: "RS Universitas Telkom",
+  description: "RS Universitas Telkom",
 };
 
 export default function RootLayout({

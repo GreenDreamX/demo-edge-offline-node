@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  edge-server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - CLOUD_API_URL=http://cloud-simrs.example.com/api
+    volumes:
+      - ./pkm-local-data:/app/local-data
+    restart: unless-stopped

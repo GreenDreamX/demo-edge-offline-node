@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Stethoscope, Plus, Trash2, Save, CheckCircle, AlertCircle, FileText, Search } from 'lucide-react';
-import { saveEncounter, getRecords, PatientRecord, Prescription } from '@/lib/storage';
+import { saveEncounter, getDecryptedRecords, PatientRecord, Prescription } from '@/lib/storage';
 
 // Mock ICD-10 Data
 const ICD10_MOCK = [
@@ -40,27 +40,12 @@ export default function OutpatientPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [showIcdDropdown, setShowIcdDropdown] = useState(false);
 
-    useEffect(() => {
-        // Load patients for dropdown
-        setPatients(getRecords());
-        // In a real app, we would fetch via API, but getRecords retrieves localDB which is synced with what we added in Registration
-        // Since this is client-side only state demo, we might need to fetch via API if we want persistence across reloads in prod
-        // For this demo, assuming getRecords returns the in-memory array.
-        // To be safe, let's fetch from API to ensure we get what's "saved"
-        fetchPatients();
-    }, []);
+    // const fetchPatients = async () => { ... } // Removed to fix build
+    // useEffect(() => { ... }, []) 
 
-    const fetchPatients = async () => {
-        try {
-            const res = await fetch('/api/records');
-            if (res.ok) {
-                const data = await res.json();
-                if (data.records) setPatients(data.records);
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    };
+    useEffect(() => {
+        setPatients(getDecryptedRecords('patient') as PatientRecord[]);
+    }, []);
 
     const addPrescription = () => {
         if (!medName || !medDose) return;
@@ -96,7 +81,9 @@ export default function OutpatientPage() {
                 patientId: selectedPatientId,
                 patientName: selectedPatient?.name || 'Unknown',
                 soap: { ...soap, p: 'Lihat Resep & Tindakan' }, // P is derived or separate
-                prescriptions: prescriptions
+                prescriptions: prescriptions,
+                class: 'AMB',
+                status: 'finished'
             });
 
             // Simulate API call delay

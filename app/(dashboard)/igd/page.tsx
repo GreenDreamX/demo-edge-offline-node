@@ -1,245 +1,243 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Ambulance, AlertTriangle, Activity, UserPlus, Clock, ArrowRight, Bed } from 'lucide-react';
-import { getDecryptedRecords, subscribeToStatus, saveEncounter, EncounterRecord, PatientRecord, saveMedicalRecord } from '@/lib/storage'; // Adjusted import path
+import { toast } from 'sonner';
+import {
+    Siren,
+    Activity,
+    HeartPulse,
+    Thermometer,
+    ArrowRight,
+    Users,
+    Clock,
+    UserPlus,
+    AlertTriangle as AlertTriangleIcon
+} from 'lucide-react';
+import {
+    getDecryptedRecords,
+    saveEncounter,
+    updateResourceStatus,
+    subscribeToStatus,
+    EncounterRecord,
+    PatientRecord
+} from '@/lib/storage'; // Assuming store exists
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 
-type TriageLevel = 'resus' | 'urgent' | 'non-urgent';
+type TriageLevel = 'RESUS' | 'EMER' | 'NON'; // Red, Yellow, Green
 
-interface TriageForm {
-    name: string;
-    age: string;
-    gender: 'male' | 'female';
-    complaint: string;
-    triageLevel: TriageLevel;
-}
+export default function IGDTriagePage() {
+    const [encounters, setEncounters] = useState<EncounterRecord[]>([]);
+    const [patients, setPatients] = useState<PatientRecord[]>([]); // For simplified demo selection
+    const [loading, setLoading] = useState(true);
+    const [selectedPatientId, setSelectedPatientId] = useState('');
+    const [triageLevel, setTriageLevel] = useState<TriageLevel>('EMER');
 
-export default function IGDPage() {
-    const [patients, setPatients] = useState<EncounterRecord[]>([]);
-    const [showModal, setShowModal] = useState(false);
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<TriageForm>();
+    const { register, handleSubmit, reset } = useForm();
+
+    const fetchQueue = () => {
+        setLoading(true);
+        // Get all Encounters that are Emergency class and active status
+        const allEncounters = getDecryptedRecords('encounter') as EncounterRecord[];
+        const igdQueue = allEncounters.filter(e =>
+            e.class === 'EMER' &&
+            ['triaged', 'arrived', 'in-progress'].includes(e.status)
+        );
+        setEncounters(igdQueue);
+
+        // Also load patients for quick registration
+        setPatients(getDecryptedRecords('patient') as PatientRecord[]);
+        setLoading(false);
+    };
 
     useEffect(() => {
-        const fetchData = () => {
-            const allEncounters = getDecryptedRecords('encounter') as EncounterRecord[];
-            // Filter for Active Emergency Encounters
-            const igdPatients = allEncounters.filter(e =>
-                e.class === 'EMER' &&
-                ['triaged', 'arrived', 'in-progress'].includes(e.status)
-            );
-            setPatients(igdPatients);
-        };
-
-        fetchData();
-        const unsubscribe = subscribeToStatus(fetchData);
+        fetchQueue();
+        const unsubscribe = subscribeToStatus(fetchQueue);
         return () => unsubscribe();
     }, []);
 
-    const onSubmit = async (data: TriageForm) => {
-        // 1. Create Patient (Simplified for Quick Admit)
-        const patient = await saveMedicalRecord({
-            name: data.name,
-            nik: `EMER-${Date.now()}`, // Temporary ID
-            gender: data.gender === 'male' ? 'Laki-laki' : 'Perempuan',
-            birthDate: new Date(new Date().getFullYear() - parseInt(data.age)).toISOString().split('T')[0], // Approx DOB
-            phone: '-',
-            address: { line: '-', city: '-', district: '-', village: '-' },
-            isSynced: false,
-            timestamp: new Date().toISOString()
-        } as unknown as PatientRecord); // Casting as we are using helper that expects specific omit but simplified
+    const onSubmit = async (data: any) => {
+        if (!selectedPatientId) {
+            toast.error("Pilih pasien terlebih dahulu!");
+            return;
+        }
 
-        // 2. Create Encounter
-        const status = data.triageLevel === 'resus' ? 'in-progress' : 'triaged';
+        const patient = patients.find(p => p.id === selectedPatientId);
+        if (!patient) return;
 
-        await saveEncounter({
-            patientId: patient.id,
-            patientName: patient.name,
-            class: 'EMER',
-            status: status,
-            soap: { s: data.complaint, o: `Triage: ${data.triageLevel.toUpperCase()}`, a: '', p: '' },
-            prescriptions: [],
-            isSynced: false,
-            timestamp: new Date().toISOString()
-        } as unknown as EncounterRecord);
+        try {
+            await saveEncounter({
+                patientId: patient.id,
+                patientName: patient.name,
+                class: 'EMER',
+                status: 'triaged',
+                soap: {
+                    s: data.complaint,
+                    o: `BP: ${data.bp} | HR: ${data.hr} | RR: ${data.rr} | Temp: ${data.temp}`,
+                    a: `Triage: ${triageLevel}`,
+                    p: 'Monitoring'
+                },
+                prescriptions: []
+            });
 
-        reset();
-        setShowModal(false);
+            toast.success("Pasien masuk antrean Triage IGD");
+            reset();
+            setSelectedPatientId('');
+        } catch (error) {
+            console.error(error);
+            toast.error("Gagal menyimpan data triage.");
+        }
     };
 
-    const getTriageColor = (level: string) => {
-        if (level.includes('RESUS')) return 'bg-red-100 text-red-800 border-red-200';
-        if (level.includes('URGENT')) return 'bg-amber-100 text-amber-800 border-amber-200';
-        return 'bg-green-100 text-green-800 border-green-200';
+    // Helper to extract triage from SOAP A (Mock Logic)
+    const getTriageColor = (enc: EncounterRecord) => {
+        const assessment = enc.soap.a || '';
+        if (assessment.includes('RESUS')) return 'red';
+        if (assessment.includes('EMER')) return 'yellow';
+        return 'green';
     };
+
+    const columns = [
+        { id: 'red', title: 'Resusitasi', color: 'bg-red-50 text-red-900 border-red-200', borderColor: 'border-red-200', icon: Siren },
+        { id: 'yellow', title: 'Emergent', color: 'bg-yellow-50 text-yellow-900 border-yellow-200', borderColor: 'border-yellow-200', icon: AlertTriangleIcon },
+        { id: 'green', title: 'Non-Urgent', color: 'bg-green-50 text-green-900 border-green-200', borderColor: 'border-green-200', icon: Users },
+    ];
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-center">
+        <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans">
+            <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Ambulance className="w-8 h-8 text-red-600" />
-                        Instalasi Gawat Darurat (IGD)
+                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                        <Siren className="w-8 h-8 text-red-600 animate-pulse" />
+                        IGD Triage Board
                     </h1>
-                    <p className="text-gray-500 font-medium mt-1">Real-time Triage Dashboard</p>
-                </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl font-semibold shadow-lg shadow-red-500/30 hover:bg-red-700 transition-all active:scale-95"
-                >
-                    <UserPlus className="w-5 h-5" />
-                    Quick Admit (Triage)
-                </button>
-            </div>
-
-            {/* Triage Board */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-                {/* Red Zone - Resuscitation */}
-                <div className="bg-red-50 rounded-2xl border border-red-100 flex flex-col">
-                    <div className="p-4 border-b border-red-100 bg-red-100/50 rounded-t-2xl flex justify-between items-center">
-                        <h2 className="font-bold text-red-900 flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5" /> Resuscitation (P1)
-                        </h2>
-                        <span className="bg-white text-red-700 font-bold px-2 py-0.5 rounded text-xs border border-red-200">
-                            {patients.filter(p => p.soap.o.includes('RESUS')).length}
-                        </span>
-                    </div>
-                    <div className="p-4 space-y-3 flex-1 overflow-y-auto">
-                        {patients.filter(p => p.soap.o.includes('RESUS')).map(patient => (
-                            <div key={patient.id} className="bg-white p-4 rounded-xl border border-red-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer group">
-                                <div className="flex justify-between items-start">
-                                    <h3 className="font-bold text-gray-900">{patient.patientName}</h3>
-                                    <Clock className="w-4 h-4 text-gray-400" />
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">{patient.soap.s}</p>
-                                <div className="mt-3 flex gap-2">
-                                    <button className="flex-1 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors">
-                                        Action
-                                    </button>
-                                    <button className="px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-semibold rounded-lg hover:bg-gray-50">
-                                        Details
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Yellow Zone - Emergent */}
-                <div className="bg-amber-50 rounded-2xl border border-amber-100 flex flex-col">
-                    <div className="p-4 border-b border-amber-100 bg-amber-100/50 rounded-t-2xl flex justify-between items-center">
-                        <h2 className="font-bold text-amber-900 flex items-center gap-2">
-                            <Activity className="w-5 h-5" /> Emergent (P2)
-                        </h2>
-                        <span className="bg-white text-amber-700 font-bold px-2 py-0.5 rounded text-xs border border-amber-200">
-                            {patients.filter(p => p.soap.o.includes('URGENT')).length}
-                        </span>
-                    </div>
-                    <div className="p-4 space-y-3 flex-1 overflow-y-auto">
-                        {patients.filter(p => p.soap.o.includes('URGENT')).map(patient => (
-                            <div key={patient.id} className="bg-white p-4 rounded-xl border border-amber-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                                <div className="flex justify-between items-start">
-                                    <h3 className="font-bold text-gray-900">{patient.patientName}</h3>
-                                    <span className="text-xs text-amber-600 font-mono bg-amber-50 px-1.5 py-0.5 rounded">10m</span>
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">{patient.soap.s}</p>
-                                <div className="mt-3 flex gap-2">
-                                    <button className="flex-1 px-3 py-1.5 bg-white border border-amber-200 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-50 transition-colors">
-                                        Assesment
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Green Zone - Non Urgent */}
-                <div className="bg-green-50 rounded-2xl border border-green-100 flex flex-col">
-                    <div className="p-4 border-b border-green-100 bg-green-100/50 rounded-t-2xl flex justify-between items-center">
-                        <h2 className="font-bold text-green-900 flex items-center gap-2">
-                            <Bed className="w-5 h-5" /> Non-Urgent (P3)
-                        </h2>
-                        <span className="bg-white text-green-700 font-bold px-2 py-0.5 rounded text-xs border border-green-200">
-                            {patients.filter(p => !p.soap.o.includes('RESUS') && !p.soap.o.includes('URGENT')).length}
-                        </span>
-                    </div>
-                    <div className="p-4 space-y-3 flex-1 overflow-y-auto">
-                        {patients.filter(p => !p.soap.o.includes('RESUS') && !p.soap.o.includes('URGENT')).map(patient => (
-                            <div key={patient.id} className="bg-white p-4 rounded-xl border border-green-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-                                <div className="flex justify-between items-start">
-                                    <h3 className="font-bold text-gray-900">{patient.patientName}</h3>
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">{patient.soap.s}</p>
-                            </div>
-                        ))}
-                    </div>
+                    <p className="text-slate-500 mt-1">Sistem prioritas penanganan pasien gawat darurat.</p>
                 </div>
             </div>
 
-            {/* Quick Admit Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-900">Quick Triage Admission</h3>
-                            <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">&times;</button>
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+                {/* Triage Form */}
+                <div className="xl:col-span-1">
+                    <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+                        <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                            <UserPlus className="w-5 h-5 text-slate-700" />
+                            Input Triage Baru
+                        </h2>
+
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Pasien (Terdaftar)</label>
+                            <select
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={selectedPatientId}
+                                onChange={e => setSelectedPatientId(e.target.value)}
+                            >
+                                <option value="">-- Pilih Pasien --</option>
+                                {patients.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name} - {p.nik}</option>
+                                ))}
+                            </select>
                         </div>
-                        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                                    <input {...register('name', { required: true })} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500" placeholder="Patient Name" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Age (Approx)</label>
-                                    <input {...register('age', { required: true })} type="number" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500" placeholder="e.g 45" />
-                                </div>
-                            </div>
 
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Keluhan Utama</label>
+                            <textarea
+                                {...register('complaint')}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                rows={3}
+                                placeholder="Nyeri dada, sesak nafas..."
+                            ></textarea>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                                <select {...register('gender')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500">
-                                    <option value="male">Male</option>
-                                    <option value="female">Female</option>
-                                </select>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Tekanan Darah</label>
+                                <input {...register('bp')} placeholder="120/80" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
-
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Chief Complaint</label>
-                                <textarea {...register('complaint', { required: true })} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500" placeholder="Describe symptoms..."></textarea>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Nadi (HR)</label>
+                                <input {...register('hr')} placeholder="80" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
-
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Triage Level</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <label className="cursor-pointer">
-                                        <input type="radio" {...register('triageLevel', { required: true })} value="resus" className="peer sr-only" />
-                                        <div className="text-center p-2 rounded-lg border border-gray-200 peer-checked:bg-red-100 peer-checked:border-red-500 peer-checked:text-red-700 font-semibold text-sm transition-all hover:bg-gray-50">
-                                            RESUS (Red)
-                                        </div>
-                                    </label>
-                                    <label className="cursor-pointer">
-                                        <input type="radio" {...register('triageLevel', { required: true })} value="urgent" className="peer sr-only" />
-                                        <div className="text-center p-2 rounded-lg border border-gray-200 peer-checked:bg-amber-100 peer-checked:border-amber-500 peer-checked:text-amber-700 font-semibold text-sm transition-all hover:bg-gray-50">
-                                            URGENT (Yel)
-                                        </div>
-                                    </label>
-                                    <label className="cursor-pointer">
-                                        <input type="radio" {...register('triageLevel', { required: true })} value="non-urgent" className="peer sr-only" />
-                                        <div className="text-center p-2 rounded-lg border border-gray-200 peer-checked:bg-green-100 peer-checked:border-green-500 peer-checked:text-green-700 font-semibold text-sm transition-all hover:bg-gray-50">
-                                            FALSE (Grn)
-                                        </div>
-                                    </label>
-                                </div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Nafas (RR)</label>
+                                <input {...register('rr')} placeholder="20" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Suhu</label>
+                                <input {...register('temp')} placeholder="36.5" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                            </div>
+                        </div>
 
-                            <button type="submit" className="w-full py-3 bg-red-600 text-white font-bold rounded-xl shadow-lg hover:bg-red-700 transition-all mt-4">
-                                Admit Patient
-                            </button>
-                        </form>
-                    </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2">Level Triage</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setTriageLevel('RESUS')}
+                                    className={`p-2 rounded-lg text-xs font-bold border-2 transition-all ${triageLevel === 'RESUS' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                                >
+                                    🔴 MERAH
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setTriageLevel('EMER')}
+                                    className={`p-2 rounded-lg text-xs font-bold border-2 transition-all ${triageLevel === 'EMER' ? 'bg-yellow-50 border-yellow-500 text-yellow-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                                >
+                                    🟡 KUNING
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setTriageLevel('NON')}
+                                    className={`p-2 rounded-lg text-xs font-bold border-2 transition-all ${triageLevel === 'NON' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-white border-slate-200 text-slate-400'}`}
+                                >
+                                    🟢 HIJAU
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10">
+                            Masuk Antrean
+                        </button>
+                    </form>
                 </div>
-            )}
+
+                {/* Kanban Board */}
+                <div className="xl:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 h-fit">
+                    {columns.map(col => (
+                        <div key={col.id} className={`rounded-2xl border-2 ${col.borderColor} bg-white overflow-hidden flex flex-col h-[calc(100vh-200px)] shadow-sm`}>
+                            <div className={`p-4 border-b ${col.borderColor} flex items-center justify-between ${col.color}`}>
+                                <h3 className="font-bold flex items-center gap-2">
+                                    <col.icon className="w-5 h-5" /> {col.title}
+                                </h3>
+                                <span className="bg-white/50 backdrop-blur px-2.5 py-1 rounded-full text-xs font-bold">
+                                    {encounters.filter(e => getTriageColor(e) === col.id).length}
+                                </span>
+                            </div>
+                            <div className="p-4 space-y-3 overflow-y-auto flex-1 bg-slate-50/50">
+                                {encounters
+                                    .filter(e => getTriageColor(e) === col.id)
+                                    .map(e => (
+                                        <div key={e.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group animate-in slide-in-from-bottom-2">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 className="font-bold text-slate-900">{e.patientName}</h4>
+                                                <span className="text-xs text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">{new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
+                                            <p className="text-sm text-slate-600 line-clamp-2 mb-3 leading-relaxed">{e.soap.s}</p>
+
+                                            <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                                <HeartPulse className="w-3.5 h-3.5 text-slate-400" />
+                                                <span className="font-mono font-medium">{e.soap.o.split('|')[0] || 'Vitals Pending'}</span>
+                                            </div>
+
+                                            <button className="mt-3 w-full py-2 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                                                Periksa Pasien &rarr;
+                                            </button>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

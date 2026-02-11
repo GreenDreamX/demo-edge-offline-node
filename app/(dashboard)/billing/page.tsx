@@ -23,6 +23,8 @@ interface Invoice {
     total: number;
 }
 
+import { PageHeader } from '@/components/ui/PageHeader';
+
 export default function BillingPage() {
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -124,48 +126,47 @@ export default function BillingPage() {
         return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(amount);
     };
 
+    // ...
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-center print:hidden">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <CreditCard className="w-8 h-8 text-green-600" />
-                        Billing & Pembayaran
-                    </h1>
-                    <p className="text-gray-500 font-medium mt-1">Invoice Management</p>
-                </div>
-                <div className="relative">
-                    <Search className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-                    <input
-                        type="text"
-                        placeholder="Search Invoice or Patient..."
-                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 w-64"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-            </div>
+            <PageHeader
+                title="Billing & Pembayaran"
+                description="Invoice Management System"
+                action={
+                    <div className="relative print:hidden">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                        <input
+                            type="text"
+                            placeholder="Cari Invoice / Pasien..."
+                            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 w-64 outline-none text-sm"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                }
+            />
 
             {/* Dashboard Cards (Hidden in Print) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                    <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
                         <DollarSign className="w-6 h-6" />
                     </div>
                     <div>
                         <p className="text-sm text-gray-500 font-medium">Potential Revenue</p>
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-2xl font-bold text-gray-900 tracking-tight">
                             {formatCurrency(invoices.reduce((acc, curr) => acc + curr.total, 0))}
                         </p>
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
+                    <div className="w-12 h-12 rounded-xl bg-yellow-50 flex items-center justify-center text-yellow-600">
                         <Clock className="w-6 h-6" />
                     </div>
                     <div>
                         <p className="text-sm text-gray-500 font-medium">Pending Payments</p>
-                        <p className="text-2xl font-bold text-gray-900">
+                        <p className="text-2xl font-bold text-gray-900 tracking-tight">
                             {invoices.filter(i => i.status === 'pending').length} Invoices
                         </p>
                     </div>
